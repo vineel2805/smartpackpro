@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "seed:schools": "node scripts/seed-real-school-data.mjs",
+    "seed:schools:dry": "node scripts/seed-real-school-data.mjs --dry-run",
+    "export:credentials": "node scripts/export-credentials-md.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
