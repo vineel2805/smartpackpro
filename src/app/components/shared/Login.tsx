@@ -1,111 +1,120 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useAuth, UserRole } from '../../context/AuthContext';
 import { Button } from '../ui/button';
-import { GraduationCap, Users, Shield } from 'lucide-react';
+import { GraduationCap, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { getFirstUserByRole } from '../../services/firestoreService';
+import { loginWithSchoolCredentials } from '../../services/firestoreService';
 
 export function Login() {
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const { schoolName: encodedSchoolName } = useParams();
+  const schoolName = encodedSchoolName ? decodeURIComponent(encodedSchoolName) : '';
+  const [role, setRole] = useState<UserRole>('student');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = async (role: UserRole) => {
+  const handleLogin = async () => {
     if (isLoggingIn) return;
 
-    setSelectedRole(role);
+    if (!schoolName) {
+      toast.error('Please select a school first');
+      navigate('/');
+      return;
+    }
+
+    if (!email.trim() || !password.trim()) {
+      toast.error('Enter your email and password');
+      return;
+    }
+
     setIsLoggingIn(true);
 
     try {
-      const user = await getFirstUserByRole(role);
+      const user = await loginWithSchoolCredentials({
+        schoolName,
+        role,
+        email,
+        password,
+      });
 
       if (!user) {
-        toast.error(`No ${role} user found in Firestore`);
+        toast.error('Invalid school, role, or credentials');
         return;
       }
 
       login(user);
       navigate(`/${role}`);
     } catch {
-      toast.error('Login failed. Please check Firebase configuration and data.');
+      toast.error('Login failed. Please check your internet and data setup.');
     } finally {
       setIsLoggingIn(false);
-      setSelectedRole(null);
     }
   };
 
-  const roles = [
-    {
-      role: 'student' as UserRole,
-      title: 'Student',
-      description: 'Check your daily packing list',
-      icon: GraduationCap,
-      color: 'from-blue-500 to-indigo-500',
-    },
-    {
-      role: 'teacher' as UserRole,
-      title: 'Teacher',
-      description: 'Manage student packing items',
-      icon: Users,
-      color: 'from-purple-500 to-pink-500',
-    },
-    {
-      role: 'admin' as UserRole,
-      title: 'Admin',
-      description: 'Manage teachers and classes',
-      icon: Shield,
-      color: 'from-green-500 to-emerald-500',
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
-        {/* Logo & Header */}
+      <div className="max-w-md w-full space-y-6">
+        <button onClick={() => navigate('/')} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Back to schools
+        </button>
+
         <div className="text-center space-y-2">
           <div className="w-20 h-20 mx-auto bg-gradient-to-br from-indigo-500 to-purple-500 rounded-3xl flex items-center justify-center">
             <GraduationCap className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-semibold">Smart Pack App</h1>
-          <p className="text-muted-foreground">Pack smarter, learn better</p>
+          <p className="text-muted-foreground">{schoolName || 'Select school to continue'}</p>
         </div>
 
-        {/* Role Selection */}
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground text-center">Select your role to continue</p>
-          {roles.map(({ role, title, description, icon: Icon, color }) => (
-            <button
-              key={role}
-              onClick={() => handleLogin(role)}
-              disabled={isLoggingIn}
-              className="w-full p-4 bg-card rounded-xl border border-border hover:border-muted-foreground/30 transition-all active:scale-[0.98] group"
+        <div className="space-y-3 bg-card border border-border rounded-xl p-4">
+          <p className="text-sm text-muted-foreground">Login with your school credentials</p>
+
+          <div className="space-y-2">
+            <label className="text-sm">Role</label>
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value as UserRole)}
+              className="w-full h-10 px-3 bg-background border border-border rounded-lg outline-none focus:border-indigo-500 transition-colors"
             >
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-lg flex items-center justify-center`}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold">{title}</p>
-                  <p className="text-sm text-muted-foreground">{description}</p>
-                </div>
-                <svg
-                  className="w-5 h-5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </button>
-          ))}
+              <option value="student">Student</option>
+              <option value="teacher">Teacher</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className="w-full h-10 px-3 bg-background border border-border rounded-lg outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full h-10 px-3 bg-background border border-border rounded-lg outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
+          <Button onClick={handleLogin} disabled={isLoggingIn} className="w-full">
+            {isLoggingIn ? 'Signing in...' : 'Login'}
+          </Button>
         </div>
 
-        {/* Footer */}
         <div className="text-center text-xs text-muted-foreground/60">
-          <p>{isLoggingIn && selectedRole ? `Signing in as ${selectedRole}...` : 'Connected to Firebase backend'}</p>
+          <p>{isLoggingIn ? `Signing in as ${role}...` : 'Connected to Firebase backend'}</p>
           <p className="mt-1">© 2026 Smart Pack App</p>
         </div>
       </div>

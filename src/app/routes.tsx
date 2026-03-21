@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import { Login } from './components/shared/Login';
+import { SchoolSelector } from './components/shared/SchoolSelector';
 import { HelpSupport } from './components/shared/HelpSupport';
 import { TodaysBag } from './components/student/TodaysBag';
 import { StudentProfile } from './components/student/StudentProfile';
@@ -25,6 +26,10 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 export const router = createBrowserRouter([
   {
     path: '/',
+    element: <SchoolSelector />,
+  },
+  {
+    path: '/login/:schoolName',
     element: <Login />,
   },
   {

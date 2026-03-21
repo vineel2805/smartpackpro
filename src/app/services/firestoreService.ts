@@ -35,6 +35,34 @@ const quickSuggestions = [
   'Dictionary',
 ];
 
+export interface SchoolOption {
+  id: string;
+  name: string;
+}
+
+export async function getSchools(): Promise<SchoolOption[]> {
+  const snapshot = await getDocs(collection(db, 'users'));
+  if (snapshot.empty) return [];
+
+  const seen = new Map<string, SchoolOption>();
+
+  snapshot.docs.forEach(item => {
+    const data = item.data();
+    const schoolName = String(data.school ?? '').trim();
+    if (!schoolName) return;
+
+    const normalized = schoolName.toLowerCase();
+    if (!seen.has(normalized)) {
+      seen.set(normalized, {
+        id: normalized.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        name: schoolName,
+      });
+    }
+  });
+
+  return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getFirstUserByRole(role: UserRole): Promise<AppUser | null> {
   const q = query(collection(db, 'users'), where('role', '==', role), limit(1));
   const snapshot = await getDocs(q);
@@ -42,6 +70,49 @@ export async function getFirstUserByRole(role: UserRole): Promise<AppUser | null
 
   const userDoc = snapshot.docs[0];
   const data = userDoc.data();
+
+  return {
+    id: userDoc.id,
+    name: data.name ?? '',
+    role: data.role,
+    email: data.email ?? '',
+    class: data.class,
+    school: data.school,
+    subject: data.subject,
+    assignedClasses: Array.isArray(data.assignedClasses) ? data.assignedClasses : [],
+    isClassTeacher: Boolean(data.isClassTeacher),
+    classTeacherOf: data.classTeacherOf,
+  } as AppUser;
+}
+
+export async function loginWithSchoolCredentials(params: {
+  schoolName: string;
+  role: UserRole;
+  email: string;
+  password: string;
+}): Promise<AppUser | null> {
+  const schoolName = params.schoolName.trim();
+  const email = params.email.trim().toLowerCase();
+  const password = params.password.trim();
+
+  const q = query(
+    collection(db, 'users'),
+    where('school', '==', schoolName),
+    where('role', '==', params.role),
+    where('email', '==', email),
+    limit(1),
+  );
+
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+
+  const userDoc = snapshot.docs[0];
+  const data = userDoc.data();
+  const storedPassword = String(data.password ?? '').trim();
+
+  if (!storedPassword || storedPassword !== password) {
+    return null;
+  }
 
   return {
     id: userDoc.id,
