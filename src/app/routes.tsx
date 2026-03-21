@@ -1,4 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router';
+import { useAuth } from './context/AuthContext';
+import type { UserRole } from './context/AuthContext';
 import { Login } from './components/shared/Login';
 import { SchoolSelector } from './components/shared/SchoolSelector';
 import { HelpSupport } from './components/shared/HelpSupport';
@@ -12,6 +14,39 @@ import { TeacherProfile } from './components/teacher/TeacherProfile';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { TeachersManagement } from './components/admin/TeachersManagement';
 import { BottomNav } from './components/teacher/BottomNav';
+
+function getHomeRouteByRole(role: UserRole) {
+  switch (role) {
+    case 'student':
+      return '/student';
+    case 'teacher':
+      return '/teacher';
+    case 'admin':
+      return '/admin';
+    default:
+      return '/';
+  }
+}
+
+function ProtectedRoute({
+  allowedRole,
+  children,
+}: {
+  allowedRole: UserRole;
+  children: React.ReactNode;
+}) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (user.role !== allowedRole) {
+    return <Navigate to={getHomeRouteByRole(user.role)} replace />;
+  }
+
+  return <>{children}</>;
+}
 
 // Layout wrapper for teacher routes
 function TeacherLayout({ children }: { children: React.ReactNode }) {
@@ -34,51 +69,81 @@ export const router = createBrowserRouter([
   },
   {
     path: '/student',
-    element: <TodaysBag />,
+    element: (
+      <ProtectedRoute allowedRole="student">
+        <TodaysBag />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/student/profile',
-    element: <StudentProfile />,
+    element: (
+      <ProtectedRoute allowedRole="student">
+        <StudentProfile />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/teacher',
     element: (
-      <TeacherLayout>
-        <TeacherDashboard />
-      </TeacherLayout>
+      <ProtectedRoute allowedRole="teacher">
+        <TeacherLayout>
+          <TeacherDashboard />
+        </TeacherLayout>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/teacher/update',
     element: (
-      <TeacherLayout>
-        <UpdateItems />
-      </TeacherLayout>
+      <ProtectedRoute allowedRole="teacher">
+        <TeacherLayout>
+          <UpdateItems />
+        </TeacherLayout>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/teacher/history',
     element: (
-      <TeacherLayout>
-        <History />
-      </TeacherLayout>
+      <ProtectedRoute allowedRole="teacher">
+        <TeacherLayout>
+          <History />
+        </TeacherLayout>
+      </ProtectedRoute>
     ),
   },
   {
     path: '/teacher/engagement',
-    element: <StudentEngagement />,
+    element: (
+      <ProtectedRoute allowedRole="teacher">
+        <StudentEngagement />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/teacher/profile',
-    element: <TeacherProfile />,
+    element: (
+      <ProtectedRoute allowedRole="teacher">
+        <TeacherProfile />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/admin',
-    element: <AdminDashboard />,
+    element: (
+      <ProtectedRoute allowedRole="admin">
+        <AdminDashboard />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/admin/teachers',
-    element: <TeachersManagement />,
+    element: (
+      <ProtectedRoute allowedRole="admin">
+        <TeachersManagement />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/help',
