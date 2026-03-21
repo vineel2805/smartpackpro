@@ -249,6 +249,80 @@ function mergeChecklistFromUpdates(updates: TeacherUpdateRecord[]): PackingItem[
   return Array.from(resolved.values()).map(entry => entry.item);
 }
 
+type AuditSource = {
+  teacherName: string;
+  teacherRoleType: 'class-teacher' | 'subject-teacher';
+  teacherSubject?: string;
+  priority: number;
+  won: boolean;
+};
+
+type AuditItem = {
+  name: string;
+  type: 'bring' | 'do-not-bring';
+  sources: AuditSource[];
+};
+
+function mergeChecklistWithAuditTracking(updates: TeacherUpdateRecord[]): AuditItem[] {
+  const resolved = new Map<
+    string,
+    {
+      priority: number;
+      item: AuditItem;
+    }
+  >();
+
+  updates.forEach(update => {
+    const priority = update.teacherRoleType === 'class-teacher' ? 2 : 1;
+
+    (update.items ?? []).forEach(rawItem => {
+      const name = String(rawItem.name ?? '').trim();
+      if (!name) return;
+
+      const normalized = normalizeItemName(name);
+      const source: AuditSource = {
+        teacherName: update.teacherName,
+        teacherRoleType: update.teacherRoleType,
+        teacherSubject: update.teacherSubject,
+        priority,
+        won: false,
+      };
+
+      const prev = resolved.get(normalized);
+      if (!prev) {
+        resolved.set(normalized, {
+          priority,
+          item: {
+            name,
+            type: rawItem.type === 'do-not-bring' ? 'do-not-bring' : 'bring',
+            sources: [source],
+          },
+        });
+      } else {
+        if (priority > prev.priority) {
+          prev.priority = priority;
+          prev.item.sources = [source];
+        } else if (priority === prev.priority) {
+          prev.item.sources.push(source);
+        } else {
+          prev.item.sources.push(source);
+        }
+      }
+    });
+  });
+
+  return Array.from(resolved.values()).map(entry => {
+    const maxPriority = Math.max(...entry.item.sources.map(s => s.priority));
+    return {
+      ...entry.item,
+      sources: entry.item.sources.map(s => ({
+        ...s,
+        won: s.priority === maxPriority,
+      })),
+    };
+  });
+}
+
 async function regenerateChecklistForClassDate(className: string, date: string) {
   const updatesQuery = query(
     collection(db, 'teacherUpdates'),
@@ -654,4 +728,17 @@ export async function getStudentEngagementByClasses(classNames: string[]): Promi
 
 export function getQuickSuggestions() {
   return quickSuggestions;
+}
+
+export async function getChecklistAuditData(className: string, date: string) {
+  const updatesQuery = query(
+    collection(db, 'teacherUpdates'),
+    where('className', '==', className),
+    where('date', '==', date),
+  );
+
+  const updatesSnapshot = await getDocs(updatesQuery);
+  const updates = updatesSnapshot.docs.map(item => item.data() as TeacherUpdateRecord);
+
+  return mergeChecklistWithAuditTracking(updates);
 }

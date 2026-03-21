@@ -59,6 +59,13 @@ export function AdminDashboard() {
               <Users className="w-5 h-5" />
               Teachers
             </Link>
+            <Link
+              to="/admin/checklist-audit"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
+            >
+              <AlertTriangle className="w-5 h-5" />
+              Checklist Audit
+            </Link>
           </nav>
         </aside>
 

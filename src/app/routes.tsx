@@ -13,6 +13,7 @@ import { StudentEngagement } from './components/teacher/StudentEngagement';
 import { TeacherProfile } from './components/teacher/TeacherProfile';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { TeachersManagement } from './components/admin/TeachersManagement';
+import { ChecklistAudit } from './components/admin/ChecklistAudit';
 import { BottomNav } from './components/teacher/BottomNav';
 
 function getHomeRouteByRole(role: UserRole) {
@@ -142,6 +143,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute allowedRole="admin">
         <TeachersManagement />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/checklist-audit',
+    element: (
+      <ProtectedRoute allowedRole="admin">
+        <ChecklistAudit />
       </ProtectedRoute>
     ),
   },
