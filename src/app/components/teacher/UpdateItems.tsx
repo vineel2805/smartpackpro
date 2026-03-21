@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/button';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { mockClasses, quickSuggestions } from '../../data/mockData';
 import { toast } from 'sonner';
+import { getClasses, getQuickSuggestions, upsertTodayPackingItems } from '../../services/firestoreService';
 
 interface Item {
   id: string;
@@ -14,10 +14,33 @@ interface Item {
 
 export function UpdateItems() {
   const { user } = useAuth();
-  const [selectedClass, setSelectedClass] = useState(user?.assignedClasses?.[0] || mockClasses[0]);
+  const [classes, setClasses] = useState<string[]>([]);
+  const [selectedClass, setSelectedClass] = useState('');
   const [action, setAction] = useState<'bring' | 'do-not-bring'>('bring');
   const [items, setItems] = useState<Item[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const availableClasses = useMemo(() => {
+    const assigned = user?.assignedClasses ?? [];
+    return assigned.length ? assigned : classes;
+  }, [user?.assignedClasses, classes]);
+
+  useEffect(() => {
+    async function loadClasses() {
+      try {
+        const fromDb = await getClasses();
+        setClasses(fromDb);
+
+        const defaultClass = user?.assignedClasses?.[0] ?? fromDb[0] ?? '';
+        setSelectedClass(defaultClass);
+      } catch {
+        toast.error('Unable to load classes from database');
+      }
+    }
+
+    loadClasses();
+  }, [user?.assignedClasses]);
 
   const addItem = (name: string) => {
     if (!name.trim()) return;
@@ -36,21 +59,43 @@ export function UpdateItems() {
     setItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (items.length === 0) {
       toast.error('Please add at least one item');
       return;
     }
+    if (!selectedClass) {
+      toast.error('Please select a class');
+      return;
+    }
+    if (!user) {
+      toast.error('You must be logged in');
+      return;
+    }
 
-    const bringCount = items.filter(i => i.type === 'bring').length;
-    const doNotBringCount = items.filter(i => i.type === 'do-not-bring').length;
+    setIsSaving(true);
 
-    toast.success('Items updated successfully!', {
-      description: `${bringCount} items to bring, ${doNotBringCount} items not to bring`,
-    });
+    try {
+      await upsertTodayPackingItems({
+        className: selectedClass,
+        items,
+        teacherId: user.id,
+        teacherName: user.name,
+      });
 
-    // Reset
-    setItems([]);
+      const bringCount = items.filter(i => i.type === 'bring').length;
+      const doNotBringCount = items.filter(i => i.type === 'do-not-bring').length;
+
+      toast.success('Items updated successfully!', {
+        description: `${bringCount} items to bring, ${doNotBringCount} items not to bring`,
+      });
+
+      setItems([]);
+    } catch {
+      toast.error('Failed to save items to database');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const bringItems = items.filter(i => i.type === 'bring');
@@ -74,7 +119,7 @@ export function UpdateItems() {
         <section>
           <h3 className="text-sm font-medium text-zinc-400 mb-2">Select Class</h3>
           <div className="flex flex-wrap gap-2">
-            {(user?.assignedClasses || mockClasses).map(cls => (
+            {availableClasses.map(cls => (
               <button
                 key={cls}
                 onClick={() => setSelectedClass(cls)}
@@ -121,7 +166,7 @@ export function UpdateItems() {
         <section>
           <h3 className="text-sm font-medium text-zinc-400 mb-2">Quick Add</h3>
           <div className="flex flex-wrap gap-2">
-            {quickSuggestions.map(suggestion => (
+            {getQuickSuggestions().map(suggestion => (
               <button
                 key={suggestion}
                 onClick={() => addItem(suggestion)}
@@ -213,10 +258,10 @@ export function UpdateItems() {
         <div className="max-w-md mx-auto">
           <Button
             onClick={handleSubmit}
-            disabled={items.length === 0}
+            disabled={items.length === 0 || isSaving || !selectedClass}
             className="w-full bg-indigo-500 hover:bg-indigo-600 h-12 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit for {selectedClass}
+            {isSaving ? 'Saving...' : `Submit for ${selectedClass || 'Class'}`}
           </Button>
         </div>
       </div>

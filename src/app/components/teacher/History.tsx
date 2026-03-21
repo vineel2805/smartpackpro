@@ -1,9 +1,38 @@
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Calendar, Plus, Minus } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
-import { mockHistory } from '../../data/mockData';
+import { getHistoryByClasses } from '../../services/firestoreService';
+import { useAuth } from '../../context/AuthContext';
+import type { HistoryEntry } from '../../types/models';
+import { toast } from 'sonner';
 
 export function History() {
+  const { user } = useAuth();
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadHistory() {
+      if (!user?.assignedClasses?.length) {
+        setHistory([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const entries = await getHistoryByClasses(user.assignedClasses);
+        setHistory(entries);
+      } catch {
+        toast.error('Failed to load history from database');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadHistory();
+  }, [user?.assignedClasses]);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-20">
       <header className="sticky top-0 z-10 bg-zinc-900/80 backdrop-blur-sm border-b border-zinc-800 px-4 py-4">
@@ -18,7 +47,10 @@ export function History() {
       </header>
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-4">
-        {mockHistory.map(entry => {
+        {isLoading && <p className="text-sm text-zinc-400">Loading history...</p>}
+        {!isLoading && history.length === 0 && <p className="text-sm text-zinc-400">No history found yet.</p>}
+
+        {history.map(entry => {
           const date = new Date(entry.date);
           const formattedDate = date.toLocaleDateString('en-US', {
             weekday: 'short',

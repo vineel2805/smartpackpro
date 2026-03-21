@@ -1,52 +1,39 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useAuth, User, UserRole } from '../../context/AuthContext';
+import { useAuth, UserRole } from '../../context/AuthContext';
 import { Button } from '../ui/button';
 import { GraduationCap, Users, Shield } from 'lucide-react';
+import { toast } from 'sonner';
+import { getFirstUserByRole } from '../../services/firestoreService';
 
 export function Login() {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (role: UserRole) => {
-    let user: User;
+  const handleLogin = async (role: UserRole) => {
+    if (isLoggingIn) return;
 
-    switch (role) {
-      case 'student':
-        user = {
-          id: 'student-1',
-          name: 'Alex Johnson',
-          email: 'alex.johnson@school.com',
-          role: 'student',
-          class: '6-A',
-          school: 'Springfield High School',
-        };
-        break;
-      case 'teacher':
-        user = {
-          id: 'teacher-1',
-          name: 'Dr. Sarah Johnson',
-          email: 'sarah.johnson@school.com',
-          role: 'teacher',
-          subject: 'Mathematics',
-          school: 'Springfield High School',
-          assignedClasses: ['6-A', '6-B', '7-A'],
-        };
-        break;
-      case 'admin':
-        user = {
-          id: 'admin-1',
-          name: 'Principal Anderson',
-          email: 'anderson@school.com',
-          role: 'admin',
-          school: 'Springfield High School',
-        };
-        break;
+    setSelectedRole(role);
+    setIsLoggingIn(true);
+
+    try {
+      const user = await getFirstUserByRole(role);
+
+      if (!user) {
+        toast.error(`No ${role} user found in Firestore`);
+        return;
+      }
+
+      login(user);
+      navigate(`/${role}`);
+    } catch {
+      toast.error('Login failed. Please check Firebase configuration and data.');
+    } finally {
+      setIsLoggingIn(false);
+      setSelectedRole(null);
     }
-
-    login(user);
-    navigate(`/${role}`);
   };
 
   const roles = [
@@ -92,6 +79,7 @@ export function Login() {
             <button
               key={role}
               onClick={() => handleLogin(role)}
+              disabled={isLoggingIn}
               className="w-full p-4 bg-card rounded-xl border border-border hover:border-muted-foreground/30 transition-all active:scale-[0.98] group"
             >
               <div className="flex items-center gap-4">
@@ -117,7 +105,7 @@ export function Login() {
 
         {/* Footer */}
         <div className="text-center text-xs text-muted-foreground/60">
-          <p>Demo version - No password required</p>
+          <p>{isLoggingIn && selectedRole ? `Signing in as ${selectedRole}...` : 'Connected to Firebase backend'}</p>
           <p className="mt-1">© 2026 Smart Pack App</p>
         </div>
       </div>

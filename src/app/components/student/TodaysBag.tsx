@@ -3,10 +3,11 @@ import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
 import { useAuth } from '../../context/AuthContext';
-import { todayPackingItems, StudentChecklistItem } from '../../data/mockData';
 import { CheckCircle2, AlertCircle, Plus, User } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
+import { getTodayPackingItems } from '../../services/firestoreService';
+import type { StudentChecklistItem } from '../../types/models';
 
 export function TodaysBag() {
   const { user } = useAuth();
@@ -14,21 +15,38 @@ export function TodaysBag() {
   const [customItems, setCustomItems] = useState<StudentChecklistItem[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize items from mock data
-    const initialItems: StudentChecklistItem[] = todayPackingItems.map(item => ({
-      ...item,
-      checked: false,
-    }));
-    setItems(initialItems);
+    async function loadTodayItems() {
+      if (!user?.class) {
+        setItems([]);
+        setIsLoading(false);
+        return;
+      }
 
-    // Load custom items from localStorage
+      try {
+        const dailyItems = await getTodayPackingItems(user.class);
+        setItems(
+          dailyItems.map(item => ({
+            ...item,
+            checked: false,
+          })),
+        );
+      } catch {
+        toast.error('Unable to load today\'s bag from database');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     const stored = localStorage.getItem('customItems');
     if (stored) {
       setCustomItems(JSON.parse(stored));
     }
-  }, []);
+
+    loadTodayItems();
+  }, [user?.class]);
 
   const bringItems = items.filter(item => item.type === 'bring');
   const doNotBringItems = items.filter(item => item.type === 'do-not-bring');
@@ -86,6 +104,27 @@ export function TodaysBag() {
     month: 'short',
     day: 'numeric',
   });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <header className="sticky top-0 z-10 bg-card/80 backdrop-blur-sm border-b border-border px-4 py-4">
+          <div className="max-w-md mx-auto flex items-center justify-between">
+            <div>
+              <h1 className="font-semibold">Today's Bag</h1>
+              <p className="text-sm text-muted-foreground">{today}</p>
+            </div>
+            <Link to="/student/profile">
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <User className="w-5 h-5" />
+              </Button>
+            </Link>
+          </div>
+        </header>
+        <main className="max-w-md mx-auto px-4 py-12 text-center text-muted-foreground">Loading bag items...</main>
+      </div>
+    );
+  }
 
   if (totalCount === 0 && doNotBringItems.length === 0) {
     return (

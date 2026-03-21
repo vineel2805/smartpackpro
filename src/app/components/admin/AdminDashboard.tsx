@@ -1,13 +1,39 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Users, School, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
-import { mockTeachers, mockClasses } from '../../data/mockData';
+import { getClasses, getRecentHistory, getTeachers } from '../../services/firestoreService';
+import type { AppUser, HistoryEntry } from '../../types/models';
+import { toast } from 'sonner';
 
 export function AdminDashboard() {
-  const totalTeachers = mockTeachers.length;
-  const totalClasses = mockClasses.length;
-  const classTeachers = mockTeachers.filter(t => t.isClassTeacher).length;
-  const unassignedClasses = mockClasses.length - classTeachers;
+  const [teachers, setTeachers] = useState<AppUser[]>([]);
+  const [classes, setClasses] = useState<string[]>([]);
+  const [recentHistory, setRecentHistory] = useState<HistoryEntry[]>([]);
+
+  useEffect(() => {
+    async function loadAdminData() {
+      try {
+        const [teacherData, classData, historyData] = await Promise.all([
+          getTeachers(),
+          getClasses(),
+          getRecentHistory(3),
+        ]);
+        setTeachers(teacherData);
+        setClasses(classData);
+        setRecentHistory(historyData);
+      } catch {
+        toast.error('Failed to load admin dashboard data');
+      }
+    }
+
+    loadAdminData();
+  }, []);
+
+  const totalTeachers = teachers.length;
+  const totalClasses = classes.length;
+  const classTeachers = useMemo(() => teachers.filter(t => t.isClassTeacher).length, [teachers]);
+  const unassignedClasses = Math.max(0, totalClasses - classTeachers);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -110,33 +136,21 @@ export function AdminDashboard() {
             <section>
               <h3 className="font-semibold mb-3">Recent Activity</h3>
               <div className="bg-zinc-900 rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-                <div className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Dr. Sarah Johnson</p>
-                      <p className="text-sm text-zinc-400">Updated items for Class 6-A</p>
+                {recentHistory.length === 0 && (
+                  <div className="p-4 text-sm text-zinc-500">No recent activity found.</div>
+                )}
+
+                {recentHistory.map(entry => (
+                  <div key={entry.id} className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">{entry.teacherName || 'Teacher'}</p>
+                        <p className="text-sm text-zinc-400">Updated items for Class {entry.class}</p>
+                      </div>
+                      <p className="text-xs text-zinc-500">{entry.date}</p>
                     </div>
-                    <p className="text-xs text-zinc-500">2 hours ago</p>
                   </div>
-                </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Mr. David Chen</p>
-                      <p className="text-sm text-zinc-400">Updated items for Class 6-B</p>
-                    </div>
-                    <p className="text-xs text-zinc-500">5 hours ago</p>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">Ms. Emily Rodriguez</p>
-                      <p className="text-sm text-zinc-400">Updated items for Class 7-A</p>
-                    </div>
-                    <p className="text-xs text-zinc-500">1 day ago</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </section>
           </div>

@@ -1,17 +1,8 @@
 import React, { createContext, useContext, useState } from 'react';
+import type { AppUser, UserRole } from '../types/models';
 
-export type UserRole = 'student' | 'teacher' | 'admin';
-
-export interface User {
-  id: string;
-  name: string;
-  role: UserRole;
-  email: string;
-  class?: string;
-  school?: string;
-  subject?: string;
-  assignedClasses?: string[];
-}
+export type User = AppUser;
+export type { UserRole };
 
 interface AuthContextType {
   user: User | null;

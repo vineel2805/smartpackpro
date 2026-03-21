@@ -1,39 +1,68 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
 import { User, CheckCircle2, Clock, Package } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { getHistoryByClasses, getStudentEngagementByClasses } from '../../services/firestoreService';
+import { toast } from 'sonner';
+import type { HistoryEntry, StudentEngagement } from '../../types/models';
 
 export function TeacherDashboard() {
   const { user } = useAuth();
+  const [engagement, setEngagement] = useState<StudentEngagement[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  useEffect(() => {
+    async function loadDashboardData() {
+      if (!user?.assignedClasses?.length) return;
+
+      try {
+        const [engagementData, historyData] = await Promise.all([
+          getStudentEngagementByClasses(user.assignedClasses),
+          getHistoryByClasses(user.assignedClasses),
+        ]);
+        setEngagement(engagementData);
+        setHistory(historyData.slice(0, 2));
+      } catch {
+        toast.error('Failed to load teacher dashboard data');
+      }
+    }
+
+    loadDashboardData();
+  }, [user?.assignedClasses]);
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
   });
 
-  const stats = [
+  const stats = useMemo(
+    () => [
     {
       label: 'Completed',
-      value: '12',
+      value: String(engagement.filter(item => item.status === 'completed').length),
       icon: CheckCircle2,
       color: 'text-green-500',
       bg: 'bg-green-500/10',
     },
     {
       label: 'In Progress',
-      value: '8',
+      value: String(engagement.filter(item => item.status === 'in-progress').length),
       icon: Clock,
       color: 'text-yellow-500',
       bg: 'bg-yellow-500/10',
     },
     {
       label: 'Not Seen',
-      value: '5',
+      value: String(engagement.filter(item => item.status === 'not-seen').length),
       icon: Package,
       color: 'text-zinc-400',
       bg: 'bg-zinc-800',
     },
-  ];
+  ],
+  [engagement],
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pb-20">
@@ -128,24 +157,19 @@ export function TeacherDashboard() {
         <section>
           <h3 className="font-semibold mb-3">Recent Updates</h3>
           <div className="space-y-2">
-            <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-              <div className="flex justify-between items-start mb-1">
-                <p className="text-sm font-medium">Class 6-A</p>
-                <p className="text-xs text-zinc-500">Today, 9:30 AM</p>
+            {history.length === 0 && <p className="text-sm text-zinc-500">No recent updates found.</p>}
+
+            {history.map(entry => (
+              <div key={entry.id} className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
+                <div className="flex justify-between items-start mb-1">
+                  <p className="text-sm font-medium">Class {entry.class}</p>
+                  <p className="text-xs text-zinc-500">{entry.date}</p>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Added {entry.itemsAdded.length} items • Removed {entry.itemsRemoved.length} items
+                </p>
               </div>
-              <p className="text-xs text-zinc-400">
-                Added 3 items • Removed 2 items
-              </p>
-            </div>
-            <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-3">
-              <div className="flex justify-between items-start mb-1">
-                <p className="text-sm font-medium">Class 6-B</p>
-                <p className="text-xs text-zinc-500">Yesterday, 2:15 PM</p>
-              </div>
-              <p className="text-xs text-zinc-400">
-                Added 2 items • Removed 1 item
-              </p>
-            </div>
+            ))}
           </div>
         </section>
       </main>

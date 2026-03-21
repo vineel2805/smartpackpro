@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Users, School, Plus, MoreVertical, Award } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
-import { mockTeachers, Teacher } from '../../data/mockData';
 import { toast } from 'sonner';
+import { getTeachers } from '../../services/firestoreService';
+import type { AppUser } from '../../types/models';
 
 export function TeachersManagement() {
-  const [teachers] = useState<Teacher[]>(mockTeachers);
+  const [teachers, setTeachers] = useState<AppUser[]>([]);
+
+  useEffect(() => {
+    async function loadTeachers() {
+      try {
+        const data = await getTeachers();
+        setTeachers(data);
+      } catch {
+        toast.error('Failed to load teachers from database');
+      }
+    }
+
+    loadTeachers();
+  }, []);
 
   const handleAddTeacher = () => {
     toast.info('Add teacher functionality would open a form here');
@@ -77,7 +91,7 @@ export function TeachersManagement() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {teacher.assignedClasses.map(cls => (
+                          {(teacher.assignedClasses ?? []).map(cls => (
                             <span
                               key={cls}
                               className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded text-xs border border-indigo-500/20"

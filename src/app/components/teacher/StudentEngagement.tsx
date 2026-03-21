@@ -1,14 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Clock, Eye, AlertCircle, Bell } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
-import { mockStudentEngagement } from '../../data/mockData';
 import { toast } from 'sonner';
+import { useAuth } from '../../context/AuthContext';
+import { getStudentEngagementByClass } from '../../services/firestoreService';
+import type { StudentEngagement as StudentEngagementItem } from '../../types/models';
 
 type StatusFilter = 'all' | 'completed' | 'in-progress' | 'not-seen' | 'inactive';
 
 export function StudentEngagement() {
+  const { user } = useAuth();
+  const [selectedClass, setSelectedClass] = useState(user?.assignedClasses?.[0] ?? '');
+  const [students, setStudents] = useState<StudentEngagementItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
+
+    async function loadEngagement() {
+      setIsLoading(true);
+      try {
+        const data = await getStudentEngagementByClass(selectedClass);
+        setStudents(data);
+      } catch {
+        toast.error('Failed to load student engagement');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadEngagement();
+  }, [selectedClass]);
 
   const statusConfig = {
     completed: {
@@ -41,20 +69,23 @@ export function StudentEngagement() {
     },
   };
 
-  const filteredStudents =
-    filter === 'all'
-      ? mockStudentEngagement
-      : mockStudentEngagement.filter(s => s.status === filter);
+  const filteredStudents = useMemo(
+    () => (filter === 'all' ? students : students.filter(s => s.status === filter)),
+    [filter, students],
+  );
 
-  const stats = {
-    completed: mockStudentEngagement.filter(s => s.status === 'completed').length,
-    'in-progress': mockStudentEngagement.filter(s => s.status === 'in-progress').length,
-    'not-seen': mockStudentEngagement.filter(s => s.status === 'not-seen').length,
-    inactive: mockStudentEngagement.filter(s => s.status === 'inactive').length,
-  };
+  const stats = useMemo(
+    () => ({
+      completed: students.filter(s => s.status === 'completed').length,
+      'in-progress': students.filter(s => s.status === 'in-progress').length,
+      'not-seen': students.filter(s => s.status === 'not-seen').length,
+      inactive: students.filter(s => s.status === 'inactive').length,
+    }),
+    [students],
+  );
 
   const handleRemindStudents = () => {
-    const count = mockStudentEngagement.filter(s => s.status === 'not-seen' || s.status === 'inactive').length;
+    const count = students.filter(s => s.status === 'not-seen' || s.status === 'inactive').length;
     toast.success(`Reminder sent to ${count} students`, {
       description: 'Students will be notified to check their packing list',
     });
@@ -71,12 +102,30 @@ export function StudentEngagement() {
           </Link>
           <div className="flex-1">
             <h1 className="font-semibold">Student Engagement</h1>
-            <p className="text-xs text-zinc-400">Class 6-A</p>
+            <p className="text-xs text-zinc-400">Class {selectedClass || 'N/A'}</p>
           </div>
         </div>
       </header>
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
+        <section>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {(user?.assignedClasses ?? []).map(cls => (
+              <button
+                key={cls}
+                onClick={() => setSelectedClass(cls)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedClass === cls
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                }`}
+              >
+                {cls}
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* Quick Stats */}
         <section className="grid grid-cols-4 gap-2">
           {Object.entries(statusConfig).map(([key, config]) => {
@@ -113,7 +162,7 @@ export function StudentEngagement() {
                   : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
               }`}
             >
-              All ({mockStudentEngagement.length})
+              All ({students.length})
             </button>
             {Object.entries(statusConfig).map(([key, config]) => {
               const count = stats[key as keyof typeof stats];
@@ -136,6 +185,11 @@ export function StudentEngagement() {
 
         {/* Student List */}
         <section className="space-y-2">
+          {isLoading && <p className="text-sm text-zinc-400">Loading engagement...</p>}
+          {!isLoading && filteredStudents.length === 0 && (
+            <p className="text-sm text-zinc-400">No engagement records found for this class.</p>
+          )}
+
           {filteredStudents.map(student => {
             const config = statusConfig[student.status];
             const Icon = config.icon;

@@ -45,6 +45,8 @@ Thumbs.db
 # Firebase (since you are using it)
 .firebase/
 .firebaserc
+firebasecredentials.txt
+
 
 # Temporary files
 tmp/
@@ -54,3 +56,4 @@ temp/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
