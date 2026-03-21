@@ -169,7 +169,168 @@ function dailyItemsDocId(className: string, date = todayKey()) {
   return `${className}_${date}`;
 }
 
+function normalizeItemName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+type TeacherUpdateRecord = {
+  className: string;
+  date: string;
+  items: Array<{
+    id?: string;
+    name?: string;
+    subject?: string;
+    type?: 'bring' | 'do-not-bring';
+  }>;
+  teacherId: string;
+  teacherName: string;
+  teacherRoleType: 'class-teacher' | 'subject-teacher';
+  teacherSubject?: string;
+};
+
+function mergeChecklistFromUpdates(updates: TeacherUpdateRecord[]): PackingItem[] {
+  const resolved = new Map<
+    string,
+    {
+      priority: number;
+      item: PackingItem;
+    }
+  >();
+
+  updates.forEach(update => {
+    const priority = update.teacherRoleType === 'class-teacher' ? 2 : 1;
+
+    (update.items ?? []).forEach((rawItem, index) => {
+      const name = String(rawItem.name ?? '').trim();
+      if (!name) return;
+
+      const normalized = normalizeItemName(name);
+      const next: PackingItem = {
+        id: rawItem.id || `${normalized}-${index}`,
+        name,
+        subject: rawItem.subject ? String(rawItem.subject) : undefined,
+        type: rawItem.type === 'do-not-bring' ? 'do-not-bring' : 'bring',
+        addedBy: 'teacher',
+      };
+
+      const prev = resolved.get(normalized);
+      if (!prev || priority >= prev.priority) {
+        resolved.set(normalized, {
+          priority,
+          item: next,
+        });
+      }
+    });
+  });
+
+  return Array.from(resolved.values()).map(entry => entry.item);
+}
+
+async function regenerateChecklistForClassDate(className: string, date: string) {
+  const updatesQuery = query(
+    collection(db, 'teacherUpdates'),
+    where('className', '==', className),
+    where('date', '==', date),
+  );
+
+  const updatesSnapshot = await getDocs(updatesQuery);
+  const updates = updatesSnapshot.docs.map(item => item.data() as TeacherUpdateRecord);
+  const mergedItems = mergeChecklistFromUpdates(updates);
+
+  // Keep finalChecklists as source of truth and mirror to dailyItems for existing screens.
+  await setDoc(
+    doc(db, 'finalChecklists', dailyItemsDocId(className, date)),
+    {
+      className,
+      date,
+      items: mergedItems,
+      generatedAt: serverTimestamp(),
+      sourceUpdateCount: updates.length,
+    },
+    { merge: true },
+  );
+
+  await setDoc(
+    doc(db, 'dailyItems', dailyItemsDocId(className, date)),
+    {
+      className,
+      date,
+      items: mergedItems,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  return mergedItems;
+}
+
+export async function submitTeacherUpdates(params: {
+  classNames: string[];
+  items: PackingItem[];
+  teacherId: string;
+  teacherName: string;
+  teacherRoleType: 'class-teacher' | 'subject-teacher';
+  teacherSubject?: string;
+}) {
+  const {
+    classNames,
+    items,
+    teacherId,
+    teacherName,
+    teacherRoleType,
+    teacherSubject,
+  } = params;
+
+  const date = todayKey();
+
+  const classUpdateTasks = classNames.map(async className => {
+    await addDoc(collection(db, 'teacherUpdates'), {
+      className,
+      date,
+      items,
+      teacherId,
+      teacherName,
+      teacherRoleType,
+      teacherSubject: teacherSubject ?? null,
+      createdAt: serverTimestamp(),
+    });
+
+    const mergedItems = await regenerateChecklistForClassDate(className, date);
+
+    const bringNames = mergedItems.filter(i => i.type === 'bring').map(i => i.name);
+    const doNotBringNames = mergedItems.filter(i => i.type === 'do-not-bring').map(i => i.name);
+
+    await addDoc(collection(db, 'history'), {
+      className,
+      date,
+      itemsAdded: bringNames,
+      itemsRemoved: doNotBringNames,
+      teacherId,
+      teacherName,
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  await Promise.all(classUpdateTasks);
+}
+
 export async function getTodayPackingItems(className: string): Promise<PackingItem[]> {
+  const finalRef = doc(db, 'finalChecklists', dailyItemsDocId(className));
+  const finalSnap = await getDoc(finalRef);
+
+  if (finalSnap.exists()) {
+    const data = finalSnap.data();
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    return items.map((item: Record<string, unknown>, index: number) => ({
+      id: (item.id as string) || `${index}-${String(item.name ?? '')}`,
+      name: String(item.name ?? ''),
+      subject: item.subject ? String(item.subject) : undefined,
+      type: item.type === 'do-not-bring' ? 'do-not-bring' : 'bring',
+      addedBy: item.addedBy === 'student' ? 'student' : 'teacher',
+    }));
+  }
+
   const ref = doc(db, 'dailyItems', dailyItemsDocId(className));
   const snap = await getDoc(ref);
   if (!snap.exists()) return [];

@@ -4,22 +4,26 @@ import { ArrowLeft, Plus, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'sonner';
-import { getClasses, getQuickSuggestions, upsertTodayPackingItems } from '../../services/firestoreService';
+import { getClasses, getQuickSuggestions, submitTeacherUpdates } from '../../services/firestoreService';
 
 interface Item {
   id: string;
   name: string;
   type: 'bring' | 'do-not-bring';
+  subject?: string;
 }
 
 export function UpdateItems() {
   const { user } = useAuth();
   const [classes, setClasses] = useState<string[]>([]);
-  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [action, setAction] = useState<'bring' | 'do-not-bring'>('bring');
+  const [scope, setScope] = useState<'subject' | 'general'>('subject');
   const [items, setItems] = useState<Item[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const teacherSubject = (user?.subject ?? '').trim();
+  const isClassTeacher = Boolean(user?.isClassTeacher);
 
   const availableClasses = useMemo(() => {
     const assigned = user?.assignedClasses ?? [];
@@ -33,7 +37,7 @@ export function UpdateItems() {
         setClasses(fromDb);
 
         const defaultClass = user?.assignedClasses?.[0] ?? fromDb[0] ?? '';
-        setSelectedClass(defaultClass);
+        setSelectedClasses(defaultClass ? [defaultClass] : []);
       } catch {
         toast.error('Unable to load classes from database');
       }
@@ -42,13 +46,24 @@ export function UpdateItems() {
     loadClasses();
   }, [user?.assignedClasses]);
 
+  const toggleClassSelection = (className: string) => {
+    setSelectedClasses(prev =>
+      prev.includes(className)
+        ? prev.filter(item => item !== className)
+        : [...prev, className],
+    );
+  };
+
   const addItem = (name: string) => {
     if (!name.trim()) return;
+
+    const itemSubject = scope === 'subject' ? teacherSubject || undefined : undefined;
     
     const newItem: Item = {
       id: Date.now().toString(),
       name: name.trim(),
       type: action,
+      subject: itemSubject,
     };
     
     setItems(prev => [...prev, newItem]);
@@ -64,8 +79,8 @@ export function UpdateItems() {
       toast.error('Please add at least one item');
       return;
     }
-    if (!selectedClass) {
-      toast.error('Please select a class');
+    if (selectedClasses.length === 0) {
+      toast.error('Please select at least one class');
       return;
     }
     if (!user) {
@@ -76,18 +91,20 @@ export function UpdateItems() {
     setIsSaving(true);
 
     try {
-      await upsertTodayPackingItems({
-        className: selectedClass,
+      await submitTeacherUpdates({
+        classNames: selectedClasses,
         items,
         teacherId: user.id,
         teacherName: user.name,
+        teacherRoleType: isClassTeacher ? 'class-teacher' : 'subject-teacher',
+        teacherSubject: teacherSubject || undefined,
       });
 
       const bringCount = items.filter(i => i.type === 'bring').length;
       const doNotBringCount = items.filter(i => i.type === 'do-not-bring').length;
 
-      toast.success('Items updated successfully!', {
-        description: `${bringCount} items to bring, ${doNotBringCount} items not to bring`,
+      toast.success('Update sent successfully!', {
+        description: `${selectedClasses.length} class(es) updated • ${bringCount} bring • ${doNotBringCount} do not bring`,
       });
 
       setItems([]);
@@ -117,14 +134,14 @@ export function UpdateItems() {
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
         {/* Class Selection */}
         <section>
-          <h3 className="text-sm font-medium text-zinc-400 mb-2">Select Class</h3>
+          <h3 className="text-sm font-medium text-zinc-400 mb-2">Select Class(es)</h3>
           <div className="flex flex-wrap gap-2">
             {availableClasses.map(cls => (
               <button
                 key={cls}
-                onClick={() => setSelectedClass(cls)}
+                onClick={() => toggleClassSelection(cls)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedClass === cls
+                  selectedClasses.includes(cls)
                     ? 'bg-indigo-500 text-white'
                     : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700'
                 }`}
@@ -134,6 +151,38 @@ export function UpdateItems() {
             ))}
           </div>
         </section>
+
+        {teacherSubject && (
+          <section>
+            <h3 className="text-sm font-medium text-zinc-400 mb-2">Instruction Type</h3>
+            <div className="grid grid-cols-2 gap-2 bg-zinc-900 p-1 rounded-lg">
+              <button
+                onClick={() => setScope('subject')}
+                className={`py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  scope === 'subject'
+                    ? 'bg-indigo-500 text-white'
+                    : 'text-zinc-400 hover:text-zinc-300'
+                }`}
+              >
+                Subject ({teacherSubject})
+              </button>
+              <button
+                onClick={() => setScope('general')}
+                disabled={!isClassTeacher}
+                className={`py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  scope === 'general'
+                    ? 'bg-indigo-500 text-white'
+                    : 'text-zinc-400 hover:text-zinc-300'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                General
+              </button>
+            </div>
+            {!isClassTeacher && (
+              <p className="text-xs text-zinc-500 mt-2">Only class teachers can send general instructions.</p>
+            )}
+          </section>
+        )}
 
         {/* Action Toggle */}
         <section>
@@ -258,10 +307,12 @@ export function UpdateItems() {
         <div className="max-w-md mx-auto">
           <Button
             onClick={handleSubmit}
-            disabled={items.length === 0 || isSaving || !selectedClass}
+            disabled={items.length === 0 || isSaving || selectedClasses.length === 0}
             className="w-full bg-indigo-500 hover:bg-indigo-600 h-12 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSaving ? 'Saving...' : `Submit for ${selectedClass || 'Class'}`}
+            {isSaving
+              ? 'Sending Update...'
+              : `Send Update (${selectedClasses.length} class${selectedClasses.length === 1 ? '' : 'es'})`}
           </Button>
         </div>
       </div>
