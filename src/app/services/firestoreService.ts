@@ -20,20 +20,65 @@ import type {
   UserRole,
 } from '../types/models';
 
-const quickSuggestions = [
-  'Textbook',
-  'Workbook',
+const generalQuickSuggestions = [
   'Notebook',
-  'Calculator',
-  'Lab Coat',
-  'Art Supplies',
-  'Sports Shoes',
-  'Drawing Book',
-  'Color Pencils',
-  'Ruler',
-  'Compass',
-  'Dictionary',
+  'Homework Folder',
+  'School Diary',
+  'ID Card',
+  'Water Bottle',
 ];
+
+const subjectQuickSuggestionMap: Record<string, string[]> = {
+  mathematics: [
+    'Textbook',
+    'Workbook',
+    'Math Notebook',
+    'Calculator',
+    'Ruler',
+    'Compass',
+    'Protractor',
+    'Graph Book',
+  ],
+  science: [
+    'Science Textbook',
+    'Science Notebook',
+    'Lab Coat',
+    'Practical Record Book',
+    'Safety Goggles',
+  ],
+  english: [
+    'English Reader',
+    'Grammar Book',
+    'Literature Notebook',
+    'Dictionary',
+    'Workbook',
+  ],
+  'social studies': [
+    'Social Studies Textbook',
+    'History Notebook',
+    'Geography Notebook',
+    'Atlas',
+    'Map Book',
+  ],
+  hindi: [
+    'Hindi Textbook',
+    'Hindi Workbook',
+    'Hindi Notebook',
+    'Grammar Book',
+    'Dictionary',
+  ],
+  art: [
+    'Art Supplies',
+    'Drawing Book',
+    'Color Pencils',
+    'Sketch Pens',
+  ],
+  'physical education': [
+    'Sports Shoes',
+    'Water Bottle',
+    'Sports Uniform',
+  ],
+};
 
 export interface SchoolOption {
   id: string;
@@ -813,8 +858,23 @@ export async function recordStudentCompleted(studentId: string, studentName: str
   }
 }
 
-export function getQuickSuggestions() {
-  return quickSuggestions;
+export function getQuickSuggestions(params?: {
+  subject?: string;
+  scope?: 'subject' | 'general';
+}) {
+  const scope = params?.scope ?? 'subject';
+  if (scope === 'general') {
+    return generalQuickSuggestions;
+  }
+
+  const subject = normalizeSubject(params?.subject);
+  const subjectSuggestions = subjectQuickSuggestionMap[subject] ?? [];
+
+  if (subjectSuggestions.length > 0) {
+    return subjectSuggestions;
+  }
+
+  return generalQuickSuggestions;
 }
 
 export async function getChecklistAuditData(className: string, date: string) {

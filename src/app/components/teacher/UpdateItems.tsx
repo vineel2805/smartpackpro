@@ -118,6 +118,10 @@ export function UpdateItems() {
 
   const bringItems = items.filter(i => i.type === 'bring');
   const doNotBringItems = items.filter(i => i.type === 'do-not-bring');
+  const quickSuggestions = useMemo(
+    () => getQuickSuggestions({ subject: teacherSubject, scope }),
+    [teacherSubject, scope],
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
@@ -216,7 +220,7 @@ export function UpdateItems() {
         <section>
           <h3 className="text-sm font-medium text-muted-foreground mb-2">Quick Add</h3>
           <div className="flex flex-wrap gap-2">
-            {getQuickSuggestions().map(suggestion => (
+            {quickSuggestions.map(suggestion => (
               <button
                 key={suggestion}
                 onClick={() => addItem(suggestion)}
